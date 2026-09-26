@@ -76,3 +76,43 @@ p01AI_todoProject/
 这是一个以学习 AI 大模型应用开发为主要目的的项目。
 
 项目首先采用原生 Python + OpenAI SDK 实现完整 AI 调用流程，后续再基于相同项目学习 LangChain、LangGraph 等框架。
+
+## 安装与运行
+
+### 1. 创建虚拟环境
+
+```bash
+python -m venv .venv
+```
+
+### 2. 安装项目依赖
+
+```bash
+pip install -r requirements.txt
+```
+
+### 3. 配置环境变量
+
+在项目根目录创建 `.env` 文件：
+
+```env
+deepseek_api_key=your_api_key
+```
+
+同时配置 MySQL 数据库环境。
+
+### 4. 启动项目
+
+运行：
+
+```bash
+python main.py
+```
+
+打开浏览器访问：
+
+```text
+http://127.0.0.1:8000/docs
+```
+
+进入 Swagger API 文档页面。
