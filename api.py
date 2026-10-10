@@ -171,6 +171,7 @@ async def validation_exception_handler(request, exc):
     )
 
 ## 2.4 普通的、没有被其他专门处理器处理的 Exception（全局异常）
+# 当程序出现未预料到的异常，并且该异常由这个处理器接管时，把真实错误记录到服务器日志中，同时向客户端返回统一的 HTTP 500 响应
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc):
     logging.exception("unexpected server error")      #把真正发生的错误记录到服务器日志里(给开发者看)
@@ -199,33 +200,45 @@ async def global_exception_handler(request, exc):
     )
 
 """
-3种异常属性/方法不同
+4种异常属性/方法不同
     异常类型               exc.status_code属性     exc.detail属性      exc.errors()方法
-    HTTPException                   有               有               不一定有
+    HTTPException                   有               有              通常没有
     RequestValidationError          通常没有        通常没有             有
-    Pydantic ValidationError        没有              没有              有       
+    Pydantic ValidationError        没有              没有              有 
+     普通 Exception                 通常没有          通常没有            通常没有     
+
+HTTPException：FastAPI 的 HTTP 异常，提供 status_code 和 detail 属性。
+RequestValidationError：FastAPI 的请求校验异常，提供 errors() 方法获取请求数据的校验错误详情。
+Pydantic ValidationError：提供 errors() 方法获取模型校验错误详情。
+普通 Exception：基础异常类型，不保证具有上述属性或方法；具体取决于实际的异常子类。 
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-三种异常处理机制：
-                 请求
-                   |
-                   ↓
-              FastAPI接口
-                   |
-        -----------------------
-        |          |          |
-        ↓          ↓          ↓
-
- HTTPException  ValidationError  Exception
-
-        |          |          |
-        ↓          ↓          ↓
-
-业务错误       数据错误      程序错误
-
-        |          |          |
-
-        ↓          ↓          ↓
-
-       4xx        422        500
+4种异常处理器：
+                    客户端请求
+                        |
+                        ↓
+                   FastAPI 接口
+                        |
+          ┌─────────────┴─────────────┐
+          ↓                           ↓
+     请求数据校验                  接口业务代码执行
+          |                           |
+          ↓                ┌──────────┼─────────────────┐
+ RequestValidationError    ↓          ↓                 ↓
+          |          HTTPException  ValidationError  Exception
+          ↓                ↓              ↓             ↓
+  用户传入的请求数据    主动抛出的        Pydantic模型      未预料到的
+  不符合接口要求        HTTP异常          校验失败         程序异常
+          |                |              |              |
+          ↓                ↓              ↓              ↓
+  request_validation   http_exception  validation   global_exception
+  _exception_handler   _handler        _handler      _handler
+          |                |              |               |
+          ↓                ↓              ↓               ↓
+     状态码 422       使用异常自带的       状态码 422        状态码 500
+                     status_code          |               |
+          |                |              |               |
+          ↓                ↓              ↓               ↓
+     返回请求校验      返回 HTTP           返回模型          记录异常日志，
+     错误详情          错误信息            校验错误详情      返回统一错误信息
 """
 
