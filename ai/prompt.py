@@ -99,9 +99,9 @@ def update_prompt(message, now_time):
         "你是一个todo修改信息提取助手。"
         "你的任务是从用户的话中提取需要修改的字段。"
         "只返回json格式。"
+        "如果用户要求修改title，则返回title字段。"
         "如果用户要求修改deadline，则返回deadline字段。"
         "如果用户要求修改status，则返回status字段。"
-        "不要返回title字段。"
         "不要判断是哪一个todo。"
         "如果用户没有要求修改某个字段，则不要返回该字段。"
         "deadline如果返回，必须是完整日期时间。"
@@ -109,6 +109,7 @@ def update_prompt(message, now_time):
         f"当前时间是：{now_time}"
         f"用户要求：{message}"
     )
+
 
 
 ### 7、负责生成AI匹配Todo提示词（可充当删除提示词）

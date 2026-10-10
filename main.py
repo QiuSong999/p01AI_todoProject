@@ -11,7 +11,9 @@ import uvicorn
           ↓
     浏览器 / Swagger
 """
-
+# ★★★ AI 负责理解，Python 负责业务控制，MySQL 负责数据操作 ★★★
+# AI 提取参数 → Python 调用业务函数 → MySQL 执行 SQL → 确认执行结果。
+# 大模型负责理解和推理，Python 负责控制程序执行，MySQL 负责存储和操作数据
 if __name__ == "__main__":  #表示：如果这个文件是“直接运行”的（不是被别的引用“间接执行”的） → 执行下面的代码
     uvicorn.run(
         "main:app",    #"文件名:对象名"

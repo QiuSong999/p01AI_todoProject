@@ -33,12 +33,19 @@ def ai_chat(message):
     # intent_prompt(message)负责生成发送给AI的提示词(prompt)。内容是让AI输出如'{"action": "search","content": "帮我查一下没完成的任务"}'
     # ask_deepseek()负责真正调用DeepSeek API，返回结果是AI生成的JSON字符串。
 
-    result = json.loads(result)
-    action = AIAction(**result)
+    """
+    虽然ask_deepseek限定了输出json的格式，但是可能不是我们想要的
+    如模型返回了{"action": "update","status": "finished"}，而我们要求的status只能是pending/completes
+    这时候就需要Pydantic来进行校验了。下面就是先将json格式转化为dict,然后**把dict拆开，作为关键字传给AIAction校验并得到对象
+    """
+    result = json.loads(result)     #把 JSON 格式的字符串，解析成 Python 字典
+    # '{"action": "search", "content": "查任务"}'：str（字符串）→ {'action': 'search', 'content': '查任务'}：dict（字典）
+
+    action = AIAction(**result)     #把字典 拆开，作为关键字参数传给 AIAction，并创建一个 Pydantic 对象
     #校验AI输出的格式是否满足AIAction，如action={"action": "search","content": "帮我查一下没完成的任务"}
     #并把输出结果变成AIAction对象AIAction("action": "search","content": "帮我查一下没完成的任务")
 
-    return action
+    return action   #返回的结果如：action = AIAction(action='search', content='查买牛奶的事项')
 
 
 ### 2、AI总入口函数
@@ -48,6 +55,7 @@ def todo_by_AI(message):
 
     # action = add / update / delete / search
     if action.action == "add":
+#前面action是ai_chat返回的AIAction对象，如AIAction(action='search', content='查买牛奶的事项')，后面.action即取出属性search
         result = addtodo_by_AI(action.content)      #AI增
         #把用户输入的消息，当作参数传给addtodo_by_AI(用户输入的消息)
 

@@ -1,6 +1,5 @@
 """
-DeepSeek连接
-ask_deepseek()
+OpenAI SDK 的方式,后续学习langchain方式
 """
 
 import os
@@ -21,12 +20,15 @@ client = OpenAI(    #创建一个用来访问大模型的客户端工具
 def ask_deepseek(message):
     try:
         response = client.chat.completions.create(         #让client向 DeepSeek 发起一次聊天请求
-        model = "deepseek-flash",         #参数：用哪个模型
-        messages=[{"role": "user",
+        model = "deepseek-flash",         #必填参数：用哪个模型
+        messages=[{"role": "user",        #必填参数：对话历史消息列表。每个元素是 {"role": 角色, "content": 内容} 的字典
                 "content": message}],
         response_format={"type": "json_object"} )
+        #JSON 模式：主要约束大模型的输出格式；
+        # 后面的Pydantic：检查数据是否符合我们定义的字段、类型和约束，例如 status 只能是 pending 或 completed
             #参数：指定输出格式。设为 {"type": "json_object"} 可强制模型输出合法的 JSON 字符串
                                                         #response返回的是对象，所以可以用.的方式来取其属性
+
         return response.choices[0].message.content      #response 是 DeepSeek 整个响应结果，是一个对象。
         #返回的就是：从整个 response 里，找到 choices 的第一个回答，再拿这个回答里的 message。
         """
@@ -77,7 +79,6 @@ def ask_deepseek(message):
         后面通过：
         json.loads()
         转换成Python字典。
-
         """
 
     except Exception as e:

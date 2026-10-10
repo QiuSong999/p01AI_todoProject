@@ -10,30 +10,34 @@ load_dotenv()       #读取 .env 文件里的配置
 ###1、定义连接函数，Python连接Mysql里面的数据库（连接数据库）~~~~~~~~~~~~~~~~~~~~~~~
 def get_connection():
     connection = pymysql.connect(
+        #调用 pymysql.connect(...)，真正去连 MySQL。返回一个 Connection 对象，赋给 connection
+
         host = os.getenv("db_host"),              #读取.env文件中的db_host，赋值给host(字符串)
         port = int(os.getenv("db_port")),         #port需要int类型，所以int()转化一下。把字符串 "3306" 转成整数 3306
         user = os.getenv("db_user"),              #读取.env文件中的db_user
         password = os.getenv("db_password"),      #读取.env文件中的db_password
         database = os.getenv("db_database"),      #读取.env文件中的db_database
-        cursorclass = pymysql.cursors.DictCursor  #查询数据库的时候，不要把每一行数据返回成 tuple，改成 dict
-    )
+        cursorclass = pymysql.cursors.DictCursor  #查询数据库的时候，把默认返回数据类型tuple，改成 dict
+    )           #⭐os.getenv 返回的是字符串
     return connection
 """
-get_connection：  你把菜谱拿在手里，但没做菜
-get_connection()：你照着菜谱做了，得到一盘菜（return 的东西）
+get_connection：  你把菜谱拿在手里，但没做菜 —— (函数本身)
+get_connection()：你照着菜谱做了，得到一盘菜 —— (return 的东西)
 菜谱 ≠ 菜。函数 ≠ 函数执行的结果。后文要执行该函数，必须有返回
 """
 
 ###2、定义查询函数
 # 2.1 查询所有数据，并进行分页
-def get_todos(page,page_size):
+def get_todos(page,page_size):      #需要上传2个参数：第几页、每页多少条数据
     connection = None   #提前初始化变量，防止 get_connection() 抛异常时 finally 里 connection 未定义
     try:
-        connection = get_connection()       #获取数据库连接；如果连接失败，会抛出异常
-        with connection.cursor() as cursor:
-            cursor.execute("select * from todos order by id limit %s offset %s;",    #设置分页查询
+        connection = get_connection()           #调用get_connection()真正连数据库；如果连接失败，会抛出异常
+        with connection.cursor() as cursor:     #从连接拿到一个 游标（cursor）
+            #游标就是你和数据库之间传话、拿结果的“操作手柄”。执行 SQL、取查询结果，都要通过它。
+            cursor.execute("select * from todos order by id limit %s offset %s;",    #执行分页查询
                            (page_size,(page-1)*page_size) )
-            result = cursor.fetchall()
+            result = cursor.fetchall()  #把查询结果全部取出
+                #cursor.fetchall() 默认返回的是tuple，但是20行代码设置了返回dict
     finally:
         if connection is not None:
             connection.close()
@@ -42,8 +46,22 @@ def get_todos(page,page_size):
 """
 connection是和数据库建立的连接；cursor是通过这个连接执行SQL、获取查询结果的操作工具。
 即先连接数据库 → 再从这个连接拿一个cursor来操作数据库；真正干活的是 cursor
+
 而 connection 更像是数据库通信通道，它负责connection.commit()、connection.close()
-一句话总结：connection 管“连接和事务”，cursor 管“SQL 和结果”。
+一句话总结：connection 管“连接和事务”，cursor 管“SQL 和结果”。连接负责“连上数据库”，游标负责“执行和取数”。
+~~~~~~
+游标到底负责什么?
+
+    职责	                对应方法
+发送SQL给数据库	cursor.execute(sql)
+  取一条结果	    cursor.fetchone()
+  取全部结果	    cursor.fetchall()
+  取前 N 条	    cursor.fetchmany(n)
+ 知道影响了几行	cursor.rowcount
+  提交事务	    connection.commit()
+  回滚事务	    connection.rollback()
+  关闭游标	    cursor.close()
+
 """
 """
 最初未加工的代码如下：
@@ -60,7 +78,7 @@ connection是和数据库建立的连接；cursor是通过这个连接执行SQL�
 """
 
 ## 2.2 条件查询
-# 2.2.1 根据id查询相关数据（只会查询到一条数据，所以不用分页）
+# 2.2.1 根据id查询相关数据（只会查询到1条数据，所以不用分页）
 def get_todo_id(id):
     connection = None
     try:
@@ -74,7 +92,7 @@ def get_todo_id(id):
     return result
 
 
-# 2.2.2 根据status查询相关数据
+# 2.2.2 根据status查询相关数据(并进行分页)
 def get_todo_status(status,page,page_size):
     connection = None
     try:
@@ -88,7 +106,8 @@ def get_todo_status(status,page,page_size):
             connection.close()
     return result
 
-# 2.2.3 根据title查询数据函数（用于做AI识别用户意图来修改数据）（如用户只会说修把“给李四发合同”的时间，deadline修改成***）
+# 2.2.3 根据title查询数据函数
+#（用于做AI识别用户意图来修改数据）（如用户只会说修把“给李四发合同”的时间，deadline修改成***）
 def get_todo_title(title,page,page_size):  #根据title模糊查询数据
     connection = None
     try:
@@ -107,6 +126,16 @@ def get_todo_title(title,page,page_size):  #根据title模糊查询数据
     finally:
         if connection is not None:
             connection.close()
+
+"""
+由上面可疑问：为啥有的函数用的是try + except + finally，有的try + finally？
+⭐没有 except 的函数：全是查询类，因为查询（SELECT）不修改数据
+查询通常只需清理资源；增删改需要考虑事务失败；事务尚未提交且发生错误时，通常回滚。
+只要你对数据库做了「写操作」，就必须考虑回滚。查询（SELECT）不需要回滚，因为它不改数据
+
+什么时候必须回滚？
+写操作执行了，但还没 commit()，中途出错了 → 必须回滚。
+"""
 
 # 2.2.4 根据deadline查询函数
 def get_todo_deadline(start_time, end_time, page, page_size):
@@ -163,9 +192,11 @@ def add_todo(title,deadline):
                 #lastrowid 返回一个整数，是上一条 INSERT 语句生成的 AUTO_INCREMENT 主键值
 
         connection.commit()     #提交
-    except Exception:
+    except Exception:           #如果连接数据库、执行 SQL 或提交事务等操作发生异常，就进入这里。
         if connection is not None:
             connection.rollback()
+            #撤销当前事务中尚未提交的数据库修改。例如，新增操作执行了，但提交前发生错误，就尝试撤销这次新增。
+            # 如果不回滚，未提交的修改可能暂时保留在事务中，占用数据库资源。
         raise       #把当前异常继续往上抛
     finally:
         if connection is not None:
@@ -175,24 +206,26 @@ def add_todo(title,deadline):
 
 ### 5、修改函数
 #根据id修改全部（即status和deadline）
-def update_all(id,status,deadline):
+def update_all(id,title,status,deadline):
     connection = None
     try:
         connection = get_connection()
         with connection.cursor() as cursor:
-            cursor.execute("update todos set status = %s,deadline = %s where id = %s;",
-                   (status,deadline,id))
+            cursor.execute("update todos set title = %s,status = %s,deadline = %s where id = %s;",
+                   (title,status,deadline,id))
+
             affected_row = cursor.rowcount   #就是把“这次 update 影响了几行”这个结果保存下来，等 cursor 关闭以后还能继续使用
             # rowcount返回一个整数，表示刚才执行的SQL影响（修改 / 删除 / 插入）了多少行
-        connection.commit()
-    except Exception:
+        connection.commit()     # 提交事务，让修改正式保存到数据
+
+    except Exception:           # SQL 执行失败时回滚，避免留下未提交的修改
         if connection is not None:
             connection.rollback()
         raise
-    finally:
+    finally:                    # 无论执行成功还是失败，都关闭数据库连接
         if connection is not None:
             connection.close()
-    return affected_row     #返回修改了几条数据
+    return affected_row         #返回修改了几条数据
 
 
 

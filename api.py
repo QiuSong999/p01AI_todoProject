@@ -27,6 +27,7 @@ app = FastAPI()
 app.include_router(todo.router,tags=["todo"])
 #include_router(...)是FastAPI 提供的方法。理解成：把一个 router 加入到这个 FastAPI 应用中。
 # 括号里的 todo.router代表： todo.py 里面那个叫 router 的 APIRouter 对象。就是“要交给 app 的那个 router 对象”。
+# todo.router解释： todo	是导入的模块 ；todo.router	表示模块里的 APIRouter 实例
 """
 Todo 路由集合交给 FastAPI 主应用管理。把todo.py 里面定义的所有路由，注册到 FastAPI 的 app 上
 router 负责收集 Todo 路由，app.include_router(todo.router) 负责把这些路由注册到 FastAPI 主应用
@@ -57,7 +58,6 @@ todo.py文件里的：
     负责定义路由（创建并配置路由）
     然后本文件中的app.include_router(todo.router)负责的是：把这些路由交给 FastAPI（把路由注册到 FastAPI）。
 """
-# todo.router解释： todo	是导入的模块 ；todo.router	表示模块里的 APIRouter 实例
 
 
 ### 1、设置根目录
@@ -70,13 +70,31 @@ def hello():
 # 改用我写的 http_exception_handler 函数来处理。 ⭐路由函数负责“发现错误并抛出去”，全局异常处理器负责“统一怎么返回”
 
 ## 2.1 创建“负责处理HTTPException异常的”处理器
-@app.exception_handler(HTTPException)       #指定要捕获的异常类型
-async def http_exception_handler(request, exc):    #request发生错误的那一次HTTP请求；exc为这次请求产生的异常
-    #exc.status_code可得到状态码；exc.detail可以的到错误说明 （status_code→是多少号；detail→是什么错）
-    return JSONResponse(        #JSONResponse：响应类。手动构造 JSON 格式的 HTTP 响应，可精确控制状态码/headers
+#作用：规定 HTTPException 出现时，如何生成返回给客户端的 HTTP 响应
+"""
+其中：
+    app：创建的 FastAPI应用对象，通常来自 app = FastAPI()；
+    exception_handler：FastAPI 提供的方法，用来注册异常处理函数；
+    HTTPException：指定要处理的异常类型。
+
+    @app.exception_handler(HTTPException)整体意思就是：
+    向FastAPI注册一个规则：当请求处理过程中出现需要由这个处理器处理的 HTTPException 时，使用对应的函数处理它。
+"""
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request, exc):    #request为发生错误的那一次HTTP请求；exc为这次请求产生的HTTPException对象
+    """
+    :param request: 代表发生异常的那一次 HTTP 请求,例如，用户通过 Swagger 请求：GET /todo/9999
+                    那么 request 就代表这次请求，包含请求相关的信息。
+    :param exc: 代表这次请求过程中产生的异常对象,如ai/todo中的deletetodo_by_AI函数抛出
+                raise HTTPException(status_code=404,detail="todo not found")，
+                FastAPI调用异常处理器时，exc 就是这个 HTTPException 对象，因此下面return可以通过.status_code获取错误码
+    :return:    JSONResponse是 FastAPI 使用的 Starlette 响应类，专门用于构造 JSON 格式的 HTTP 响应。
+    """
+    return JSONResponse(                    #JSONResponse：负责构造 HTTP 响应，并将 content 中的数据转换成 JSON 响应内容。
         status_code=exc.status_code,        #HTTPException→ 属于已经明确的业务/HTTP错误
         content={"error": exc.detail}       # → 可以把具体信息告诉用户
-    )
+    )       #例如ai/todo中的deletetodo_by_AI函数raise HTTPException(status_code=404,detail="todo not found")
+            #抛出的异常，经处理后，客户端收到{"error": "todo not found"}。就处理好了
 
 """
 request → 这次 /todo/9999 请求
@@ -123,30 +141,32 @@ RequestValidationError → 处理「进入接口的数据」不符合要求 （�
 ## 2.2 RequestValidationError = "用户传进来的"数据不符合接口要求
 @app.exception_handler(RequestValidationError)
 async def request_validation_exception_handler(request, exc):
-
+    # request：发生错误的那一次HTTP请求对象  ;  exc：捕获到的 RequestValidationError 异常对象
     return JSONResponse(
-        status_code=422,
+        status_code=422,        # 直接指定 HTTP 响应状态码为 422，表示请求数据校验失败
         content={
-            "error":"request data invalid",
-            "detail":exc.errors()
+            "error":"request data invalid",  # 返回统一的错误提示
+            "detail":exc.errors()           #errors() 是 ValidationError 提供的一个方法，用来获取数据校验失败的详细信息。
         }
     )
 
 """
-RequestValidationError → 处理「进入接口的数据」不符合要求 （本项目用来处理用户上传数据不符要求）
-ValidationError → 处理「程序内部生成的数据」不符合要求（本项目用来处理大模型的输出不符要求）
-    目的是把 FastAPI 的“入口数据校验”和 AI 应用里的“模型输出校验”区分开
+RequestValidationError： 处理进入 FastAPI 接口的请求数据不符合要求的情况。 
+    例如：用户漏传必填参数、传入的数据类型不正确。 
+ValidationError： 处理 Pydantic 模型校验失败的情况。 例如：程序内部将大模型输出的数据交给 Pydantic 模型校验， 
+    但大模型输出的数据不符合模型定义的字段或类型要求。 
+注意： 两种异常都可以通过 exc.errors() 获取具体的校验错误详情。 但它们的异常类型和典型触发场景不同。
 """
 
-## 2.3 捕获"数据不符合模型要求"时抛出的错误(程序内部拿到的数据不符合要求)
+## 2.3 捕获"数据不符合模型要求"时抛出的错误(程序内部拿到的数据不符合要求):Pydantic 模型校验失败
 @app.exception_handler(ValidationError)
 async def validation_exception_handler(request, exc):
-
+    # request：发生错误的 HTTP 请求对象  ； exc：捕获到的 ValidationError 异常对象
     return JSONResponse(
-        status_code=422,
+        status_code=422,    #Pydantic的 ValidationError对象通常没有 status_code 这个属性，所以不能直接使用 exc.status_code
         content={
             "error":"data validation failed",
-            "detail":exc.errors()
+            "detail":exc.errors()   #Pydantic的 ValidationError通常没有 detail 和 status_code 这两个属性，但它有 errors() 这个方法
         }
     )
 
@@ -179,6 +199,12 @@ async def global_exception_handler(request, exc):
     )
 
 """
+3种异常属性/方法不同
+    异常类型               exc.status_code属性     exc.detail属性      exc.errors()方法
+    HTTPException                   有               有               不一定有
+    RequestValidationError          通常没有        通常没有             有
+    Pydantic ValidationError        没有              没有              有       
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 三种异常处理机制：
                  请求
                    |

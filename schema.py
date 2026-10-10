@@ -131,15 +131,18 @@ class AITodoUpdate(BaseModel):      #用户可能只修改deadline/status，也�
     #"ignore"——忽略多余字段（默认），直接丢掉不报错；"allow"——允许多余字段，保存下来，可访问；"forbid"——禁止多余字段，有额外字段报错422
     #"model_config = ConfigDict() — 用来设置这个模型的全局行为（比如怎么处理多余字段、怎么处理空格等）
     #不写 model_config = ConfigDict(...) 时，Pydantic v2 默认就是 extra="ignore"，如上面定义的几个类就没写，采取igonre
-    """区别：
+    """
+    区别：
                 写法	                     层级	      影响范围
     title: str = Field(min_length=1)	字段级	只影响 title 这一个字段
     model_config = ConfigDict(...)	    模型级	影响整个模型（所有字段）
     """
-    deadline:datetime | None = None     #deadline 可以有，也可以没有。
-    status: Literal["pending", "completed"] | None = None           #status 可以有，也可以没有。
 # 如果 extra="ignore"（默认）：这些多余字段被静默丢弃，你根本不知道 AI"乱返回"了。
 # 如果 extra="forbid"：直接报错，你立刻发现"AI 返回格式不对"，可以调整提示词或模型，所以这个类要加上
+
+    title: str | None = None                                    # 用户想修改的待办事项title；None 表示不修改标题
+    deadline:datetime | None = None                             # deadline 可以有，也可以没有。
+    status: Literal["pending", "completed"] | None = None       # status 可以有，也可以没有。
 
 """普通修改返回模板 和 AI修改返回模板 也用TodoResponse(BaseModel)"""
 

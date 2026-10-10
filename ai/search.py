@@ -35,7 +35,7 @@ from datetime import datetime
 # 把AI返回的查询参数解析和校验逻辑抽取出来。避免 search_todos_by_title、search_all_todos、
 # search_todos_by_status 三个分支重复写相同代码。
 
-##公共参数解析函数
+##公共参数解析函数（将AI返回的json格式的其选择的工具以及参数解析成dict，并AITodoSearch进行校验）
 def parse_ai_search_arguments(tool_call):       #tool_call是第一次调用 AI 后，AI 返回的工具调用信息。
     try:
         arguments = json.loads(tool_call.function.arguments)    #tool_call.function.argumentsAI 返回的工具参数
@@ -121,7 +121,7 @@ Python执行真正查询
 所以：ask_deepseek_tool = AI决策阶段
 """
 
-### 3、 定义AI查询Todo/数据 的业务函数
+### 3、 定义AI查询Todo/数据 的业务函数★★★（上面定义的2个函数都是为此查询函数服务的）
 def searchtodo_by_AI(message):
     """
     AI查询Todo主流程。
@@ -145,7 +145,7 @@ def searchtodo_by_AI(message):
     # 把当前时间和用户的问题传给AI，帮助AI理解“今天、明天、后天”等时间表达
 
     messages = [{"role": "system",
-                 "content": search_prompt() },  #search_prompt()：生成“AI查询Todo时选择工具”的提示词
+                 "content": search_prompt() },  #search_prompt()：是提示词，作用是告知LLM如何选取查询工具
                 #告诉AI：你有哪些查询工具。根据用户需求选择对应工具。
 
                 {"role": "user",
@@ -172,7 +172,7 @@ def searchtodo_by_AI(message):
 
     print("AI返回：", result)
 
-    if not result.tool_calls:       #如果生成的工具列表为空
+    if not result.tool_calls:       #如果生成的工具列表为空（AI没有选择出查询工具）
         raise HTTPException(
             status_code=400,
             detail="无法识别查询需求"
@@ -188,11 +188,11 @@ def searchtodo_by_AI(message):
     print("工具参数：", tool_call.function.arguments)        #打印所用工具的参数
 
 
-    # -------------根据AI选择的工具执行不同函数-------------
-    # 工具1
-    if tool_call.function.name == "search_todos_by_title":      #如果是根据title查询相关数据
-        search_data = parse_ai_search_arguments(tool_call)  #得到对象如：AITodoSearch(title="牛肉",page=1,page_size=10)
-        # 引用###5步骤里面的公共参数解析函数：
+    # -------------根据AI选择的查询工具执行不同的查询函数-------------
+    # 工具1(根据title查询)~~~~~~
+    if tool_call.function.name == "search_todos_by_title":     #如果是根据title查询相关数据
+        search_data = parse_ai_search_arguments(tool_call)     #得到对象如：AITodoSearch(title="牛肉",page=1,page_size=10)
+        # 引用###5步骤里面的公共参数解析函数的目的：
         # 1. 解析AI返回的JSON参数
         # 2. 使用AITodoSearch进行参数校验
         # 3. 校验失败时统一返回400错误
@@ -215,7 +215,7 @@ def searchtodo_by_AI(message):
         title = search_data.title       #取出上面得到对象的title
         query_result = search_todos_by_title(title ,search_data.page ,search_data.page_size)    # 执行真正的查询
 
-    # 工具2~~~~~~
+    # 工具2(查询所有数据)~~~~~~
     elif tool_call.function.name == "search_all_todos":
         search_data = parse_ai_search_arguments(tool_call)
 
@@ -224,7 +224,7 @@ def searchtodo_by_AI(message):
             search_data.page_size
         )  # 调用工具2，执行真正的查询
 
-    # 工具3~~~~~~
+    # 工具3(根据status查询)~~~~~~
     elif tool_call.function.name == "search_todos_by_status":
         search_data = parse_ai_search_arguments(tool_call)
 
@@ -236,7 +236,7 @@ def searchtodo_by_AI(message):
             search_data.page_size
         )
 
-    # 工具4~~~~~~
+    # 工具4(根据deadline区间查询)~~~~~~
     elif tool_call.function.name == "search_todos_by_deadline":
         arguments = parse_ai_search_arguments(tool_call)    #arguments 已经不是普通字典，而是 AITodoSearch 对象
 
@@ -247,7 +247,7 @@ def searchtodo_by_AI(message):
             arguments.page_size
         )
 
-    # 工具5
+    # 工具5(综合查询)~~~~~~
     elif tool_call.function.name == "search_todos_advanced":
         arguments = parse_ai_search_arguments(tool_call)
 
@@ -272,7 +272,8 @@ def searchtodo_by_AI(message):
     # 计算总页数。例如：total=7，page_size=5。结果：2页
     print("工具执行结果：", todos)
 
-    # ~~~~~~~~~上面第一次调用AI，让AI确定执行哪个函数（工具），并得到返回结果~~~~~~~~~
+
+    # ~~~~~~~~~~~~~~上面第一次调用AI，让AI确定执行哪个函数（工具），并得到返回结果~~~~~~~~~~~~~~
     """
     第一次调用AI：让 AI 决定“调用哪个工具”（这里必须把 tools 告诉 AI。所以第一次需要：messages + tools）
     第二次：已经没有“选工具”这个任务了，根据查询结果回答用户即可（不需要再传 tools）
