@@ -29,13 +29,13 @@ from pydantic import ValidationError
 from fastapi import HTTPException
 
 
-from schema import TodoAdd, AITodoUpdate
+from schema import TodoAdd, AITodoUpdate,AITodoMatch
 
 
 ### 1、定义AI添加 Todo/数据 的业务函数
 def addtodo_by_AI(message):
     try:
-        now_time = datetime.now()
+        now_time = datetime.now()   #获取当前时间，帮助大模型理解“明天”“后天下午”等相对时间。
         result = ask_deepseek(add_prompt(message, now_time))
         #add_prompt(message, now_time)是提示词 —— 从用户自然语言中提取新增数据的：title、 deadline
 
@@ -58,7 +58,9 @@ def addtodo_by_AI(message):
     except ValidationError as e:    #ValidationError → 数据校验失败
         # 如果try 块里抛了 ValidationError，就进入这个分支，异常对象叫 e
         raise Exception("ai output data validation failed") from e
-        # 抛出一个新的Exception，并把原始的ValidationError挂在它后面
+        # 抛出一个新的Exception，并把原始的ValidationError挂在它后面。把原来的 ValidationError 转换成了普通 Exception。
+        # 因此，如果这个新异常继续传到 api.py，通常会由 global_exception_handler() 处理，返回 HTTP 500，
+        # 而不是进入你注册的 ValidationError 处理器。原始校验异常不会以原类型继续向上传递。
     #ValidationError包含于Exception(见下面注释)，所以ValidationError要写在Exception上面，先处理
     # ⭐先捕获需要特殊处理的异常，再捕获通用的Exception
 
@@ -87,19 +89,29 @@ def addtodo_by_AI(message):
                   └── RequestValidationError ← 请求参数校验失败（422）
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 AI新增流程：
-    用户message
-         ↓
-    DeepSeek提取title、deadline
-         ↓
+    用户自然语言
+      ↓
+    add_prompt()
+          ↓
+    ask_deepseek()
+          ↓
+    JSON 字符串
+          ↓
     json.loads()
-         ↓
-    TodoAdd校验
-         ↓
+          ↓
+    Python 字典
+          ↓
+    TodoAdd(**result)
+          ↓
+    Pydantic 校验后的对象
+          ↓
     add_todo()
-         ↓
+          ↓
+    写入 MySQL，得到新 ID
+          ↓
     get_todo_id()
-         ↓
-    返回完整todo
+          ↓
+    返回新增后的完整记录
 """
 
 
@@ -121,18 +133,16 @@ def updatetodo_by_AI(message):
         # 为什么这里需要Pydantic？
         # 因为：LLM输出 → 可能格式错误的数据 → Pydantic校验 → 业务代码 → MySQL（LLM不能直接相信）
 
-        #~~~~~~~~~~~~~~~~~~
+        #~~~~~~~~~~~~~~~~~~（第一次：提取修改内容；第二次：匹配要修改的待办）
         # 第二次调用AI：作用：根据用户描述 + 数据库已有todo，找到用户真正想修改的是哪一条数据
         titles = get_all_titles()    #获取数据库所有title，为了AI匹配
         match_result = ask_deepseek(match_todo_prompt(message, titles))
-        #match_todo_prompt提示词：根据用户描述，从数据库已有Todo列表里面找到目标id
+        #match_todo_prompt提示词：根据用户描述，从数据库已有Todo列表里面找到目标事项的 id
 
         match_result = json.loads(match_result)
         # AI返回JSON字符串，例如：'{"id": 3}'，json.loads()将其转换成Python字典：{"id": 3}
-        todo_id = int(match_result["id"])
-        #从上述字典中取出id，并转换成int类型，例如：3
-
-        todo_data = get_todo_id(todo_id)    # 利用查询（根据id）数据函数找到对应的数据
+        todo_id = int(match_result["id"])   #从上述字典中取出id，并转换成int类型，例如：3
+        todo_data = get_todo_id(todo_id)    # 利用根据id查询数据函数找到对应的待修改的数据
 
         if todo_data is None:               #没找到相应数据，抛HTTPException
             raise HTTPException(
@@ -142,9 +152,9 @@ def updatetodo_by_AI(message):
 
         # 如果 AI 提取出了新标题，就使用新标题；否则保留数据库原来的标题
         title = (
-            todo.title
-            if todo.title is not None
-            else todo_data["title"]
+            todo.title      #todo为AI提取出来的，并经过AITodoUpdate检验过的“修改的字段” —— 对象
+            if todo.title is not None   #判断字段是否提供了新值
+            else todo_data["title"]     #todo_data为原始待修改的数据
         )
 
         # 如果AI返回了新的status，就使用AI的；如果AI没有返回status，就保留数据库原来的status
@@ -161,7 +171,7 @@ def updatetodo_by_AI(message):
             else todo_data["deadline"]
         )
 
-        # 根据数据库真实id修改数据     #（真正的修改函数）
+        # 根据数据库真实id修改数据      #（真正的修改函数）
         result = update_all(        #update_all()返回修改了几条数据
             todo_data["id"],
             title,
@@ -177,7 +187,9 @@ def updatetodo_by_AI(message):
 
     # HTTPException需要原样抛出
     except HTTPException:
-        raise
+        raise       #捕获 HTTPException 后原样重新抛出，保留原来的 HTTP 状态码和错误信息
+    # raise Exception("...") from e创建新的通用异常，并保留原始异常原因
+    # except HTTPException:  raise：原样重新抛出HTTP异常，保留其类型和信息
 
     # AI返回格式错误
     except ValidationError as e:    #ValidationError → 数据校验失败
@@ -189,25 +201,30 @@ def updatetodo_by_AI(message):
     except Exception as e:
         raise Exception("ai update todo failed") from e
 """
-AI修改todo流程：
-
-用户自然语言
-    ↓
-第一次DeepSeek
-    ↓
-提取修改字段(deadline/status)
-    ↓
-AITodoUpdate校验
-    ↓
-获取数据库title列表
-    ↓
-第二次DeepSeek匹配目标todo id
-    ↓
-根据id查询原数据
-    ↓
-update_all()
-    ↓
-返回修改后的todo
+AI 修改 Todo 流程：
+    用户自然语言
+        ↓
+    第一次 DeepSeek
+        ↓
+    提取需要修改的字段（title / deadline / status 等）
+        ↓
+    json.loads() 解析 JSON 字符串
+        ↓
+    AITodoUpdate 校验并生成模型“对象”
+        ↓
+    获取数据库中现有的 todo title 列表
+        ↓
+    第二次 DeepSeek 匹配目标 todo id
+        ↓
+    根据 todo id 查询原始数据
+        ↓
+    合并新旧字段（新值优先，未提供新值则保留原值）
+        ↓
+    update_all() 更新数据库
+        ↓
+    重新查询更新后的 todo
+        ↓
+    返回修改后的 todo
 """
 
 """
@@ -246,13 +263,13 @@ get_todo_id(id)
 ### 11、定义AI删除数据函数
 def deletetodo_by_AI(message):
     try:
-        # 获取数据库已有todo标题
-        todos = get_all_titles()
+        todos = get_all_titles()    # 获取数据库已有todo标题
 
         #第二次调用AI：根据用户描述匹配具体todo
         match_result = ask_deepseek(match_todo_prompt(message, todos))
-
+        #根据用户的message，从现有todos里面匹配到要修改数据的id
         match_result = json.loads(match_result)
+        todo_match = AITodoMatch(**match_result)    # 使用 Pydantic 校验 AI 返回的数据结构和 id
         todo_id = int(match_result["id"])
 
         # 根据AI找到的id，删除数据库中的todo
@@ -282,11 +299,11 @@ AI删除流程：
         ↓
     get_all_titles()
         ↓
-     AI匹配id
+     AI匹配待删除事项的id
         ↓
       int()
         ↓
-    delete_todo()
+    delete_todo() ：根据id删除
         ↓
     返回删除结果
 """

@@ -159,6 +159,14 @@ class AITodoDelete(BaseModel):          #用于：接收用户发送给 AI 删�
 class CountResponse(BaseModel):
     count:int
 
+### 15、AI匹配 Todo 的结果校验模板
+class AITodoMatch(BaseModel):
+    # 禁止 AI 返回未定义的额外字段
+    model_config = ConfigDict(extra="forbid")
+
+    # 要求 AI 返回待办 ID，且必须是大于 0 的整数
+    id: int = Field(gt=0)
+
 """
 打开http://127.0.0.1:8000/docs，发现下面有Schema，可是里面怎么有
 HTTPValidationError 、ValidationError 这两个没定义的模板呢？
@@ -180,16 +188,32 @@ HTTPValidationError 、ValidationError 这两个没定义的模板呢？
         FastAPI 为了让 Swagger 文档知道这种错误长什么样，就自动生成了：
 """
 """
-模板	                   类型
-TodoResponse	      返 回
-TodoPageResponse	  返 回
-MessageResponse	      返 回
-CountResponse	      返 回
-TodoAdd	              上 传
-AITodoAdd	          上 传
-TodoUpdate	          上 传
-AITodoUpdateRequest	  上 传
-AITodoDelete	      上 传
-AITodoUpdate	    AI内部校验
+ 一、接口请求模板 (Request)
+这类模板负责接收客户端提交的数据，例如前端、Swagger /docs 上传的数据。
+     模板                     用途                    用户提交的数据示例     
+     TodoAdd                普通新增 Todo             title、deadline     
+     TodoUpdate             普通修改 Todo             status、deadline     
+     AITodoAdd              请求 AI 帮忙新增 Todo      message     
+     AITodoUpdateRequest    请求 AI 帮忙修改 Todo      message     
+     AITodoDelete           请求 AI 帮忙删除 Todo      message     
+     AITodoSearchRequest    请求 AI 帮忙查询 Todo      message   
+
+二、接口响应模板 (Response)
+这类模板负责规范 API 最终返回给客户端的数据。
+     模板                     用途                                      主要字段         
+     TodoResponse        返回一条 Todo                              id、title、deadline、status、created_at     
+     TodoPageResponse    返回普通分页查询结果                         page、page_size、total、total_pages、data     
+     AITodoPageResponse  返回 AI 分页查询结果                        message、分页信息、data     
+     MessageResponse     返回新增、删除等操作消息（具体由接口使用决定）    id、message     
+     CountResponse       返回 Todo 数量统计                          count       
+     
+三、AI 内部校验模板
+这类模板不是直接接收用户请求的，而是用于校验大模型输出的数据，确保 AI 返回的结果符合程序要求。
+
+     模板             用途                      校验的数据       
+     AIAction      判断用户意图               action、content     
+     AITodoSearch  校验 AI 提取的查询条件      status、title、start_time、end_time、分页参数     
+     AITodoUpdate  校验 AI 提取的修改字段      title、deadline、status     
+     AITodoMatch   校验 AI 匹配出的目标 Todo   id     
 """
 
