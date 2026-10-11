@@ -32,36 +32,33 @@ def ask_deepseek(message):
         return response.choices[0].message.content      #response 是 DeepSeek 整个响应结果，是一个对象。
         #返回的就是：从整个 response 里，找到 choices 的第一个回答，再拿这个回答里的 message。
         """
-        AI最初返回的如下面类似的结：     #非字典，而是对象
-            response = {
-                        "id": "chatcmpl-xxx",
-                        "object": "chat.completion",
-                        "created": 1727000000,
-                        "model": "deepseek-flash",
-                        "choices": [
-                            {
-                                "index": 0,
-                                "message": {
-                                    "role": "assistant",
-                                    "content": "",
-                                    "tool_calls": [
-                                        {
-                                            "id": "call_123",
-                                            "type": "function",
-                                            "function": {
-                                                "name": "get_pending_todos",
-                                                "arguments": "{}"  }
-                                        }
-                                      ]
-                                        },
-                                "finish_reason": "tool_calls"
-                            }
-                        ],
-                        "usage": {
-                            "prompt_tokens": 100,
-                            "completion_tokens": 20,
-                            "total_tokens": 120
-                        }}
+        AI最初返回的response如下面类似的结：     #非字典，而是对象
+            ChatCompletion(
+                           id="chatcmpl-123",
+                           choices=[
+                               Choice(
+                                   index=0,
+                                   message=ChatCompletionMessage(
+                                            role="assistant",
+                                            content=None,
+                                            tool_calls=[
+                                                {"id": "call_123",
+                                                "type": "function",
+                                                "function": {
+                                                    "name": "get_pending_todos",
+                                                    "arguments": "{}"  }
+                                                                }
+                                                        ],
+                                    finish_reason="tool_calls"
+                                        )
+                                    ],
+                           created=1720000000,
+                           model="deepseek-flash",
+                           usage={...},
+                           
+        ★★ChatCompletion的属性，可通过.的方式获取的主要有：id、 choices、 created 、model、 usage
+        
+    
         ~~~~~~~~~~~~~~~~~~~~~~~
         #本函数返回的是response.choices[0].message，即：
             "message"： {"role": "assistant",        #是对象，不是字典

@@ -141,7 +141,9 @@ def updatetodo_by_AI(message):
 
         match_result = json.loads(match_result)
         # AI返回JSON字符串，例如：'{"id": 3}'，json.loads()将其转换成Python字典：{"id": 3}
-        todo_id = int(match_result["id"])   #从上述字典中取出id，并转换成int类型，例如：3
+
+        todo_match = AITodoMatch(**match_result)    # 使用Pydantic模型校验AI返回的数据
+        todo_id = todo_match.id                     #从校验通过的模型对象中获取目标Todo的id，例如：3
         todo_data = get_todo_id(todo_id)    # 利用根据id查询数据函数找到对应的待修改的数据
 
         if todo_data is None:               #没找到相应数据，抛HTTPException
@@ -270,7 +272,7 @@ def deletetodo_by_AI(message):
         #根据用户的message，从现有todos里面匹配到要修改数据的id
         match_result = json.loads(match_result)
         todo_match = AITodoMatch(**match_result)    # 使用 Pydantic 校验 AI 返回的数据结构和 id
-        todo_id = int(match_result["id"])
+        todo_id = todo_match.id                      #从 Pydantic 模型对象中获取 id
 
         # 根据AI找到的id，删除数据库中的todo
         result = delete_todo(todo_id)       #delete_todo()返回删除了几条数据

@@ -86,9 +86,9 @@ def ask_deepseek_tool(messages):  # 让AI选择工具
         )
 
         return response.choices[0].message
-        # 返回AI生成的消息对象。里面可能包含：
-        # 1.content 普通回答
-        # 2.tool_calls AI选择的工具
+        #response的是AI返回的ChatCompletion对象，结构见client文件中第35行左右的备注
+            # response.choices[0].message里面可能包含：
+            # 1.content 普通回答  2.tool_calls AI选择的工具
 
     except Exception as e:
         print("ai service error:", e)
@@ -183,6 +183,7 @@ def searchtodo_by_AI(message):
     # result.tool_calls 即从AI返回的response 中取出tool_calls(所用的工具)
 
     tool_call = result.tool_calls[0]  # tool_calls = 工具调用列表
+    # 当前代码的设计是：一次用户查询，只处理 AI 返回的第一个工具调用。所以取第一个工具
     # result.tool_calls = [工具调用1,工具调用2,工具调用3]      #这种结构
     print("工具名称：", tool_call.function.name)             #打印所用工具的名字
     print("工具参数：", tool_call.function.arguments)        #打印所用工具的参数
@@ -299,8 +300,8 @@ def searchtodo_by_AI(message):
     messages = [{  # 重新构造第二次AI需要的消息
         "role": "system",
         "content":search_result_prompt()},
-        result,  # 第一次AI选择工具的结果
-        tool_message]  # Python执行工具后的结果
+        result,         # result就是“assistant角色”：第一次AI选择工具的结果
+        tool_message]  # tool_message就是“tool角色”：Python执行工具后的结果
 
     second_response = client.chat.completions.create(  # 第二次调用AI
         model="deepseek-flash",

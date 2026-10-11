@@ -126,7 +126,7 @@ class AITodoUpdateRequest(BaseModel):   #AI 修改接口接收用户自然语言
     message:str = Field(min_length=1)
 
 ### 11、 AI修改结果校验模板
-class AITodoUpdate(BaseModel):      #用户可能只修改deadline/status，也可能两个都修改
+class AITodoUpdate(BaseModel):      #用户可能只修改title/deadline/status，也可能3个都修改
     model_config = ConfigDict(extra="forbid")   #"forbid"	禁止多余字段
     #"ignore"——忽略多余字段（默认），直接丢掉不报错；"allow"——允许多余字段，保存下来，可访问；"forbid"——禁止多余字段，有额外字段报错422
     #"model_config = ConfigDict() — 用来设置这个模型的全局行为（比如怎么处理多余字段、怎么处理空格等）
