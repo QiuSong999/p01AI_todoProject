@@ -114,8 +114,30 @@ router = APIRouter(prefix="/todo")
 #用户输入自然语言，由AI判断用户想执行：新增 / 修改 / 删除 / 查询
 @router.post("/todobyai")
 def todobyai(request: AITodoAdd):
+    """
+    ★AITodoAdd是一个Pydantic模型，用来规定和校验用户提交的数据结构。
+    整个过程分为两步：
+    1、校验数据：FastAPI接收到用户提交的请求体后，根据AITodoAdd的规则进行校验。
+    2、创建对象：校验通过后，Pydantic创建一个AITodoAdd对象，并将它传给函数的参数request
+
+    """
     result = todo_by_AI(request.message)    #AI总入口函数
     return result
+"""
+(request: AITodoAdd)表示用户在浏览器 ···/docs 中输入话语
+    假设用户提交的是：Json格式'{"message": "查询所有待办事项"}'
+    FastAPI 接收到用户提交的 JSON 后，会让 Pydantic 根据 AITodoAdd 模型校验请求数据，并创建一个模型对象。
+    所以可以通过request.message的方式回去用户输入的内容
+~~~~~~~~~~~~~~~
+⭐⭐⭐
+项目设计“用户上传数据校验”和“大模型输出数据校验”，两种不同的校验方式
+1、用户上传的数据校验
+    如果通过 FastAPI 接收请求，并在路由函数中声明 Pydantic 模型：
+        def todobyai(request: AITodoAdd):
+    FastAPI 就会根据 AITodoAdd 自动校验请求数据，并在校验通过后创建模型对象。
+    这是 FastAPI 常见的请求参数校验方式。
+2、大模型输出的数据校验
+"""
 
 
 """~~~~~~~~~~~~~下面是普通操作（非AI）路由函数~~~~~~~~~~~~~"""
